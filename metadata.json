@@ -1,0 +1,13 @@
+{
+  "name": "sensitive-ss",
+  "description": "Detects screenshot activity when sensitive sites are open in browser windows. Displays topbar warning and logs events for SIEM ingestion.",
+  "uuid": "sensitive-ss@security.local",
+  "url": "",
+  "shell-version": [
+    "42",
+    "43",
+    "44"
+  ],
+  "version": 1,
+  "settings-schema": "org.gnome.shell.extensions.sensitive-ss"
+}

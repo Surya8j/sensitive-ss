@@ -1,0 +1,42 @@
+<!--
+  SIEM Rules — sensitive-ss
+  Place in your SIEM rules directory
+-->
+
+<group name="sensitive_ss,">
+
+  <!-- Base rule: any screenshot-on-sensitive-site event -->
+  <rule id="100800" level="10">
+    <decoded_as>json</decoded_as>
+    <field name="event_type">screenshot_on_sensitive_site</field>
+    <description>Screenshot detected while sensitive site was open — user: $(user), host: $(hostname)</description>
+    <group>data_protection,insider_threat,</group>
+    <mitre>
+      <id>T1113</id>
+    </mitre>
+  </rule>
+
+  <!-- Elevated: multiple screenshot events from same user within 5 min -->
+  <rule id="100801" level="12" frequency="3" timeframe="300">
+    <if_matched_sid>100800</if_matched_sid>
+    <same_field>user</same_field>
+    <description>Repeated screenshot activity on sensitive sites — possible data exfiltration — user: $(user)</description>
+    <group>data_protection,insider_threat,</group>
+    <mitre>
+      <id>T1113</id>
+      <id>T1041</id>
+    </mitre>
+  </rule>
+
+  <!-- Screen recording tools (higher severity) -->
+  <rule id="100802" level="12">
+    <if_sid>100800</if_sid>
+    <field name="detection_tool">obs|kazam|simplescreenrecorder|peek</field>
+    <description>Screen RECORDING tool used while sensitive site open — user: $(user)</description>
+    <group>data_protection,insider_threat,</group>
+    <mitre>
+      <id>T1113</id>
+    </mitre>
+  </rule>
+
+</group>

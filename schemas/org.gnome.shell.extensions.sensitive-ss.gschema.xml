@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.sensitive-ss"
+          path="/org/gnome/shell/extensions/sensitive-ss/">
+
+    <key name="sensitive-patterns" type="as">
+      <default>[]</default>
+      <summary>Sensitive window title patterns</summary>
+      <description>
+        List of patterns to match against the full browser window title.
+        Case-insensitive. Use specific strings like 'App Dashboard'
+        or 'admin.example.com' to avoid false positives.
+        Locked down via dconf in production.
+      </description>
+    </key>
+
+    <key name="ignore-patterns" type="as">
+      <default>['Google Search', '- Google -', 'google.com/search']</default>
+      <summary>Ignore patterns</summary>
+      <description>
+        If the window title contains any of these patterns, skip it
+        even if a sensitive pattern matches. Case-insensitive.
+        Used to filter out search engine results pages.
+      </description>
+    </key>
+
+    <key name="log-path" type="s">
+      <default>''</default>
+      <summary>Log file path</summary>
+      <description>
+        Path to the JSON log file for SIEM ingestion.
+        If empty, defaults to ~/.local/share/sensitive-ss/events.log
+      </description>
+    </key>
+
+    <key name="warning-duration" type="i">
+      <default>5</default>
+      <summary>Warning duration in seconds</summary>
+      <description>How long the topbar warning is displayed before auto-dismissing.</description>
+    </key>
+
+  </schema>
+</schemalist>
