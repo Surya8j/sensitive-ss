@@ -170,14 +170,57 @@ class ScreenshotIndicator extends PanelMenu.Button {
                 }
             );
 
-            // Also monitor by watching for the screenshot file creation
-            // The built-in tool saves to /tmp or ~/Pictures
+            // Monitor for screenshot/screencast file creation
+            // Resolve actual paths at runtime
             this._screenshotMonitors = [];
-            const watchDirs = [
-                GLib.get_tmp_dir(),
-                GLib.build_filenamev([GLib.get_home_dir(), 'Pictures']),
-                GLib.build_filenamev([GLib.get_home_dir(), 'Pictures', 'Screenshots']),
-            ];
+            const home = GLib.get_home_dir();
+            const watchDirsSet = {};  // deduplicate
+
+            // XDG user directories
+            try {
+                const [okP, outP] = GLib.spawn_command_line_sync('xdg-user-dir PICTURES');
+                if (okP) {
+                    const p = imports.byteArray.toString(outP).trim();
+                    if (p) watchDirsSet[p] = true;
+                }
+            } catch (_e) { }
+
+            try {
+                const [okV, outV] = GLib.spawn_command_line_sync('xdg-user-dir VIDEOS');
+                if (okV) {
+                    const v = imports.byteArray.toString(outV).trim();
+                    if (v) {
+                        watchDirsSet[v] = true;
+                        // Also watch Screencasts subfolder
+                        watchDirsSet[v + '/Screencasts'] = true;
+                    }
+                }
+            } catch (_e) { }
+
+            // Flameshot save path
+            try {
+                const flameshotIni = GLib.build_filenamev([home, '.config', 'flameshot', 'flameshot.ini']);
+                const iniFile = Gio.File.new_for_path(flameshotIni);
+                if (iniFile.query_exists(null)) {
+                    const [ok, contents] = iniFile.load_contents(null);
+                    if (ok) {
+                        const text = imports.byteArray.toString(contents);
+                        const match = text.match(/savePath=(.+)/);
+                        if (match && match[1]) {
+                            watchDirsSet[match[1].trim()] = true;
+                        }
+                    }
+                }
+            } catch (_e) { }
+
+            // Fallback defaults
+            watchDirsSet[GLib.get_tmp_dir()] = true;
+            watchDirsSet[GLib.build_filenamev([home, 'Pictures'])] = true;
+            watchDirsSet[GLib.build_filenamev([home, 'Pictures', 'Screenshots'])] = true;
+            watchDirsSet[GLib.build_filenamev([home, 'Videos'])] = true;
+            watchDirsSet[GLib.build_filenamev([home, 'Videos', 'Screencasts'])] = true;
+
+            const watchDirs = Object.keys(watchDirsSet);
 
             for (let i = 0; i < watchDirs.length; i++) {
                 try {
@@ -193,9 +236,17 @@ class ScreenshotIndicator extends PanelMenu.Button {
                         if (eventType !== Gio.FileMonitorEvent.CREATED) return;
 
                         const name = file.get_basename().toLowerCase();
+
+                        // Screenshot files
                         if (name.indexOf('screenshot') !== -1 ||
                             name.match(/\.(png|jpg|jpeg|bmp)$/)) {
                             self._onScreenshotDetected('file_monitor', 'screenshot-file');
+                        }
+
+                        // Screencast files
+                        if (name.indexOf('screencast') !== -1 ||
+                            name.match(/\.(webm|mp4|mkv)$/)) {
+                            self._onScreenshotDetected('file_monitor', 'screencast-file');
                         }
                     });
 
