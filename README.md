@@ -270,3 +270,32 @@ sensitive-ss@security.local/
 
 - GNOME Shell 42+ (tested on 42–47)
 - No external dependencies
+
+## Security Hardening (admin)
+
+The `deploy-admin.sh` script locks `sensitive-patterns` and `ignore-patterns` via dconf, preventing users from modifying them. However, a determined user could still bypass detection by disabling the system extension and installing a modified local copy.
+
+To prevent this, admins can apply additional OS-level restrictions:
+
+- **Disable extension management** — lock the GNOME Extensions app via dconf so users cannot enable/disable extensions:
+  ```bash
+  # Add to /etc/dconf/db/local.d/01-sensitive-ss
+  [org/gnome/shell]
+  disable-extension-version-validation=true
+  enabled-extensions=['sensitive-ss@security.local']
+
+  # Add to /etc/dconf/db/local.d/locks/sensitive-ss
+  /org/gnome/shell/enabled-extensions
+  ```
+
+- **Restrict local extension directory** — prevent users from installing local extensions:
+  ```bash
+  chmod 755 /home/*/.local/share/gnome-shell/extensions/ 2>/dev/null
+  chattr +i /home/*/.local/share/gnome-shell/extensions/
+  ```
+
+- **Monitor for tampering** — configure your SIEM to alert if the extension is disabled or if new extensions are installed locally. Monitor file changes in `~/.local/share/gnome-shell/extensions/`.
+
+- **Log file protection** — in production, logs are written to `/var/log/sensitive-ss.log` owned by `root:adm`. Users can append (so the extension can log) but cannot delete or modify existing entries.
+
+These measures are outside the scope of this extension and should be applied based on your organization's security posture.
