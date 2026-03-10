@@ -89,6 +89,7 @@ class ScreenshotIndicator extends PanelMenu.Button {
 
         // --- Start detection ---
         this._startWindowMonitor();
+        this._startScreenshotDBusMonitor();
     }
 
     /* ----- Log path resolution ----- */
@@ -133,6 +134,105 @@ class ScreenshotIndicator extends PanelMenu.Button {
                 this._onScreenshotDetected('window_monitor', detectedTool);
             }
         });
+    }
+
+    /* ================================================================== */
+    /*  DETECTION 2: GNOME Built-in Screenshot (D-Bus)                     */
+    /*  Wraps org.gnome.Shell.Screenshot methods                           */
+    /*  Catches PrtSc, Alt+PrtSc, Shift+PrtSc                             */
+    /* ================================================================== */
+
+    _startScreenshotDBusMonitor() {
+        this._dbusPatched = false;
+        this._origMethods = {};
+
+        try {
+            // Access the Screenshot D-Bus service implementation
+            // In GNOME Shell, this is exposed as a global service
+            const screenshotService = global.backend.get_dbus_daemon
+                ? null  // Not directly accessible, use proxy approach
+                : null;
+
+            // Use D-Bus proxy to monitor Screenshot calls
+            const bus = Gio.DBus.session;
+            const self = this;
+
+            // Monitor D-Bus for Screenshot method calls using a name watcher
+            this._dbusWatchId = bus.signal_subscribe(
+                null,                                    // sender
+                'org.gnome.Shell.Screenshot',            // interface
+                null,                                    // member (all signals)
+                '/org/gnome/Shell/Screenshot',           // object path
+                null,                                    // arg0
+                Gio.DBusSignalFlags.NONE,
+                function(_connection, _sender, _path, _iface, _signal, _params) {
+                    self._onScreenshotDetected('dbus_screenshot', 'gnome-shell-screenshot');
+                }
+            );
+
+            // Also monitor by watching for the screenshot file creation
+            // The built-in tool saves to /tmp or ~/Pictures
+            this._screenshotMonitors = [];
+            const watchDirs = [
+                GLib.get_tmp_dir(),
+                GLib.build_filenamev([GLib.get_home_dir(), 'Pictures']),
+                GLib.build_filenamev([GLib.get_home_dir(), 'Pictures', 'Screenshots']),
+            ];
+
+            for (let i = 0; i < watchDirs.length; i++) {
+                try {
+                    const dir = Gio.File.new_for_path(watchDirs[i]);
+                    if (!dir.query_exists(null)) continue;
+
+                    const monitor = dir.monitor_directory(
+                        Gio.FileMonitorFlags.NONE,
+                        null
+                    );
+
+                    monitor.connect('changed', (monitor, file, otherFile, eventType) => {
+                        if (eventType !== Gio.FileMonitorEvent.CREATED) return;
+
+                        const name = file.get_basename().toLowerCase();
+                        if (name.indexOf('screenshot') !== -1 ||
+                            name.match(/\.(png|jpg|jpeg|bmp)$/)) {
+                            self._onScreenshotDetected('file_monitor', 'screenshot-file');
+                        }
+                    });
+
+                    this._screenshotMonitors.push(monitor);
+                } catch (_e) {
+                    // Directory doesn't exist or can't be monitored
+                }
+            }
+
+            this._dbusPatched = true;
+        } catch (_e) {
+            // D-Bus monitoring not available, skip
+        }
+    }
+
+    _stopScreenshotDBusMonitor() {
+        if (this._dbusWatchId) {
+            try {
+                Gio.DBus.session.signal_unsubscribe(this._dbusWatchId);
+            } catch (_e) {
+                // Best effort
+            }
+            this._dbusWatchId = null;
+        }
+
+        if (this._screenshotMonitors) {
+            for (let i = 0; i < this._screenshotMonitors.length; i++) {
+                try {
+                    this._screenshotMonitors[i].cancel();
+                } catch (_e) {
+                    // Best effort
+                }
+            }
+            this._screenshotMonitors = null;
+        }
+
+        this._dbusPatched = false;
     }
 
     /* ================================================================== */
@@ -309,6 +409,7 @@ class ScreenshotIndicator extends PanelMenu.Button {
     /* ================================================================== */
 
     destroy() {
+        this._stopScreenshotDBusMonitor();
         if (this._windowSignalId) {
             global.display.disconnect(this._windowSignalId);
             this._windowSignalId = null;

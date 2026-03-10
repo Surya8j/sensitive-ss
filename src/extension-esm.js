@@ -86,6 +86,7 @@ class ScreenshotIndicator extends PanelMenu.Button {
         this.add_child(this._box);
 
         this._startWindowMonitor();
+        this._startScreenshotDBusMonitor();
     }
 
     _resolveLogPath() {
@@ -123,6 +124,83 @@ class ScreenshotIndicator extends PanelMenu.Button {
                 this._onScreenshotDetected('window_monitor', detectedTool);
             }
         });
+    }
+
+    _startScreenshotDBusMonitor() {
+        this._dbusPatched = false;
+        this._dbusWatchId = null;
+        this._screenshotMonitors = [];
+
+        try {
+            const bus = Gio.DBus.session;
+            const self = this;
+
+            this._dbusWatchId = bus.signal_subscribe(
+                null,
+                'org.gnome.Shell.Screenshot',
+                null,
+                '/org/gnome/Shell/Screenshot',
+                null,
+                Gio.DBusSignalFlags.NONE,
+                function() {
+                    self._onScreenshotDetected('dbus_screenshot', 'gnome-shell-screenshot');
+                }
+            );
+
+            const watchDirs = [
+                GLib.get_tmp_dir(),
+                GLib.build_filenamev([GLib.get_home_dir(), 'Pictures']),
+                GLib.build_filenamev([GLib.get_home_dir(), 'Pictures', 'Screenshots']),
+            ];
+
+            for (let i = 0; i < watchDirs.length; i++) {
+                try {
+                    const dir = Gio.File.new_for_path(watchDirs[i]);
+                    if (!dir.query_exists(null)) continue;
+
+                    const monitor = dir.monitor_directory(
+                        Gio.FileMonitorFlags.NONE,
+                        null
+                    );
+
+                    monitor.connect('changed', (monitor, file, otherFile, eventType) => {
+                        if (eventType !== Gio.FileMonitorEvent.CREATED) return;
+
+                        const name = file.get_basename().toLowerCase();
+                        if (name.indexOf('screenshot') !== -1 ||
+                            name.match(/\.(png|jpg|jpeg|bmp)$/)) {
+                            self._onScreenshotDetected('file_monitor', 'screenshot-file');
+                        }
+                    });
+
+                    this._screenshotMonitors.push(monitor);
+                } catch (_e) {
+                    // skip
+                }
+            }
+
+            this._dbusPatched = true;
+        } catch (_e) {
+            // skip
+        }
+    }
+
+    _stopScreenshotDBusMonitor() {
+        if (this._dbusWatchId) {
+            try {
+                Gio.DBus.session.signal_unsubscribe(this._dbusWatchId);
+            } catch (_e) { }
+            this._dbusWatchId = null;
+        }
+
+        if (this._screenshotMonitors) {
+            for (let i = 0; i < this._screenshotMonitors.length; i++) {
+                try { this._screenshotMonitors[i].cancel(); } catch (_e) { }
+            }
+            this._screenshotMonitors = null;
+        }
+
+        this._dbusPatched = false;
     }
 
     _onScreenshotDetected(source, tool) {
@@ -270,6 +348,7 @@ class ScreenshotIndicator extends PanelMenu.Button {
     }
 
     destroy() {
+        this._stopScreenshotDBusMonitor();
         if (this._windowSignalId) {
             global.display.disconnect(this._windowSignalId);
             this._windowSignalId = null;
