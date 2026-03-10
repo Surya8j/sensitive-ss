@@ -6,17 +6,17 @@ Detects screenshot activity when sensitive sites are visible in any browser wind
 
 ```
 ┌──────────────────────────────────────────────────┐
-│                  GNOME Shell                      │
+│                  GNOME Shell                     │
 │                                                  │
 │  1. Listens for window-created signal            │
 │  2. If new window is a screenshot tool →         │
-│  3. Scan visible browser windows on active        │
+│  3. Scan visible browser windows on active       │
 │     workspace (all monitors)                     │
-│  4. Match titles against sensitive-patterns       │
-│  5. Skip if title matches ignore-patterns         │
+│  4. Match titles against sensitive-patterns      │
+│  5. Skip if title matches ignore-patterns        │
 │  6. If match → change icon to :(  + log event    │
 │                                                  │
-│  Topbar:  :)  →  :(  (red, 5s)  →  :)           │
+│  Topbar:  :)  →  :(  (red, 5s)  →  :)            │
 └──────────────────────────────────────────────────┘
                       │
                       ▼
